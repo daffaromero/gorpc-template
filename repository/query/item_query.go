@@ -2,7 +2,8 @@ package query
 
 import (
 	"context"
-	"gorpc-template/v2/protobuf/api"
+
+	"github.com/daffaromero/gorpc-template/protobuf/api"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

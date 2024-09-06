@@ -4,15 +4,13 @@ This repo holds the template for a gRPC, event-driven, Go backend.
 
 ## What it is
 
-- Short and sweet
-- Event-driven
+ - Event-driven
 - gRPC
 - PostgreSQL
 
 ## What it isn't
 
 - A full-fledged example
-- A boilerplate
 - A tutorial
 
 ## Who it is for
