@@ -27,12 +27,12 @@ func NewStore(db *pgxpool.Pool, config config.DBConfig) Store {
 }
 
 func (s *store) WithTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.config.TimeOutDuration)*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.config.TimeOutDuration)*time.Second)
 	defer cancel()
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	defer func() {
@@ -54,4 +54,11 @@ func (s *store) WithTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	}
 
 	return nil
+}
+
+func (s *store) WithoutTx(ctx context.Context, fn func(pool *pgxpool.Pool) error) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.config.TimeOutDuration)*time.Second)
+	defer cancel()
+
+	return fn(s.db)
 }
