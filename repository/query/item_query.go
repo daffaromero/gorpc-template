@@ -9,10 +9,10 @@ import (
 )
 
 type ItemQuery interface {
-	CreateItem(ctx context.Context, tx pgx.Tx, item *api.Item) error
+	CreateItem(ctx context.Context, tx pgx.Tx, item *api.Item) (*api.Item, error)
 	GetItem(ctx context.Context, id string) (*api.Item, error)
 	ListItems(ctx context.Context) ([]*api.Item, error)
-	UpdateItem(ctx context.Context, tx pgx.Tx, item *api.Item) error
+	UpdateItem(ctx context.Context, tx pgx.Tx, item *api.Item) (*api.Item, error)
 	DeleteItem(ctx context.Context, tx pgx.Tx, id string) error
 }
 
@@ -24,23 +24,24 @@ func NewItemQuery(db *pgxpool.Pool) *itemQuery {
 	return &itemQuery{db: db}
 }
 
-func (q *itemQuery) CreateItem(ctx context.Context, tx pgx.Tx, item *api.Item) error {
-	query := `INSERT INTO items (id, name, description) VALUES ($1, $2, $3)`
+func (q *itemQuery) CreateItem(ctx context.Context, tx pgx.Tx, item *api.Item) (*api.Item, error) {
+	query := `INSERT INTO items (id, name, description) VALUES ($1, $2, $3) RETURNING id, name, description`
 
-	_, err := tx.Exec(ctx, query, item.Id, item.Name, item.Description)
+	var createdItem api.Item
+	err := tx.QueryRow(ctx, query, item.Id, item.Name, item.Description).Scan(&createdItem.Id, &createdItem.Name, &createdItem.Description)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &createdItem, nil
 }
 
 func (q *itemQuery) GetItem(ctx context.Context, id string) (*api.Item, error) {
 	query := `SELECT id, name, description FROM items WHERE id = $1`
 
 	row := q.db.QueryRow(ctx, query, id)
-	var item api.Item
 
+	var item api.Item
 	err := row.Scan(&item.Id, &item.Name, &item.Description)
 	if err != nil {
 		return nil, err
@@ -71,15 +72,16 @@ func (q *itemQuery) ListItems(ctx context.Context) ([]*api.Item, error) {
 	return items, nil
 }
 
-func (q *itemQuery) UpdateItem(ctx context.Context, tx pgx.Tx, item *api.Item) error {
-	query := `UPDATE items SET name = $1, description = $2 WHERE id = $3`
+func (q *itemQuery) UpdateItem(ctx context.Context, tx pgx.Tx, item *api.Item) (*api.Item, error) {
+	query := `UPDATE items SET name = $1, description = $2 WHERE id = $3 RETURNING id, name, description`
 
-	_, err := tx.Exec(ctx, query, item.Name, item.Description, item.Id)
+	var updatedItem api.Item
+	err := tx.QueryRow(ctx, query, item.Name, item.Description, item.Id).Scan(&updatedItem.Id, &updatedItem.Name, &updatedItem.Description)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &updatedItem, nil
 }
 
 func (q *itemQuery) DeleteItem(ctx context.Context, tx pgx.Tx, id string) error {
