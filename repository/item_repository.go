@@ -2,9 +2,12 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/daffaromero/gorpc-template/protobuf/api"
+	"github.com/daffaromero/gorpc-template/repository/query"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,21 +20,45 @@ type ItemRepository interface {
 }
 
 type itemRepository struct {
-	db Store
+	db        Store
+	itemQuery query.ItemQuery
 }
 
-func NewItemRepository(db *pgxpool.Pool) ItemRepository {
-	return &itemRepository{db: db}
+func NewItemRepository(db *pgxpool.Pool, itemQuery query.ItemQuery) ItemRepository {
+	return &itemRepository{db: db, itemQuery: itemQuery}
 }
 
 func (r *itemRepository) CreateItem(ctx context.Context, item *api.Item) (*api.Item, error) {
-	query := `INSERT INTO items (id, name, description) VALUES ($1, $2, $3) RETURNING id, name, description`
+	var createdItem *api.Item
 
-	var createdItem api.Item
-	err := r.db.WithTx(ctx, query, item.Id, item.Name, item.Description).Scan(&createdItem.Id, &createdItem.Name, &createdItem.Description)
+	err := r.db.WithTx(ctx, func(tx pgx.Tx) error {
+		var err error
+		createdItem, err = r.itemQuery.CreateItem(ctx, tx, item)
+		if err != nil {
+			return fmt.Errorf("failed to create item: %w", err)
+		}
+		return nil
+	})
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
-	return &createdItem, nil
+	return createdItem, nil
+}
+
+func (r *itemRepository) GetItem(ctx context.Context, id string) (*api.Item, error) {
+	var item *api.Item
+
+	err := r.db.WithoutTx(ctx, func(ctx context.Context) error {
+		var err error
+		item, err = r.itemQuery.GetItem(ctx, id)
+		return err
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("transaction failed: %w", err)
+	}
+
+	return item, nil
 }

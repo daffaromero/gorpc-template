@@ -13,7 +13,7 @@ import (
 
 type Store interface {
 	WithTx(ctx context.Context, fn func(tx pgx.Tx) error) error
-	WithoutTx(ctx context.Context, fn func(pool *pgxpool.Pool) error) error
+	WithoutTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 type store struct {
@@ -56,9 +56,13 @@ func (s *store) WithTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	return nil
 }
 
-func (s *store) WithoutTx(ctx context.Context, fn func(pool *pgxpool.Pool) error) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.config.TimeOutDuration)*time.Second)
+func (s *store) WithoutTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, s.config.TimeOutDuration)
 	defer cancel()
 
-	return fn(s.db)
+	if err := fn(ctx); err != nil {
+			return fmt.Errorf("operation failed: %w", err)
+	}
+
+	return nil
 }

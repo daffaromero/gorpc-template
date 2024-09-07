@@ -2,10 +2,13 @@ package query
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/daffaromero/gorpc-template/protobuf/api"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -26,18 +29,34 @@ func NewItemQuery(db *pgxpool.Pool) *itemQuery {
 }
 
 func (q *itemQuery) CreateItem(ctx context.Context, tx pgx.Tx, item *api.Item) (*api.Item, error) {
+	if item == nil {
+		return nil, errors.New("item cannot be nil")
+	}
+
 	query := `INSERT INTO items (id, name, description) VALUES ($1, $2, $3) RETURNING id, name, description`
 
 	var createdItem api.Item
 	err := tx.QueryRow(ctx, query, item.Id, item.Name, item.Description).Scan(&createdItem.Id, &createdItem.Name, &createdItem.Description)
 	if err != nil {
-		return nil, err
+		if pgErr, ok := err.(*pgconn.PgError); ok {
+			switch pgErr.Code {
+			case "23505": // unique_violation
+				return nil, fmt.Errorf("item with ID %s already exists: %w", item.Id, err)
+			case "23502": // not_null_violation
+				return nil, fmt.Errorf("missing required field: %w", err)
+			}
+		}
+		return nil, fmt.Errorf("failed to create item: %w", err)
 	}
 
 	return &createdItem, nil
 }
 
 func (q *itemQuery) GetItem(ctx context.Context, id string) (*api.Item, error) {
+	if id == "" {
+		return nil, errors.New("id cannot be empty")
+	}
+
 	query := `SELECT id, name, description FROM items WHERE id = $1`
 
 	row := q.db.QueryRow(ctx, query, id)
@@ -45,6 +64,9 @@ func (q *itemQuery) GetItem(ctx context.Context, id string) (*api.Item, error) {
 	var item api.Item
 	err := row.Scan(&item.Id, &item.Name, &item.Description)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("item with ID %s not found", id)
+		}
 		return nil, err
 	}
 
